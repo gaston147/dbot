@@ -232,6 +232,7 @@ public class Main {
 					Matcher m = pc.p.matcher(" " + event.getMessage().getContent() + " ");
 					while (m.find()) {
 						String v = pc.v;
+						v = v.replaceAll("\\$\\(author\\)", event.getMessage().getAuthor().getDisplayName(event.getMessage().getGuild()).replaceAll("\\$", "\\\\$"));
 						for (int i = 0; i <= m.groupCount(); i++)
 							v = v.replaceAll("\\$\\(" + i + "\\)", m.group(i).replaceAll("\\$", "\\\\$"));
 						sb.append(v + "\n");
@@ -403,7 +404,7 @@ public class Main {
 						index++;
 					int len = Integer.parseInt(line.substring(prev, index));
 					index++; // ";"
-					data[i] = line.substring(index, index + len);
+					data[i] = Utils.decodeWrite(line.substring(index, index + len));
 					index += len;
 					index++; // ";"
 				}
@@ -439,7 +440,7 @@ public class Main {
 			for (String name : patterns.keySet()) {
 				PatternCmd pc = patterns.get(name);
 				String ps = pc.p.toString();
-				bw.write(pc.name.length() + ";" + pc.name + ";" + ps.length() + ";" + ps + ";" + pc.v.length() + ";" + pc.v + ";\n");
+				bw.write(Utils.encodeWrite(pc.name) + Utils.encodeWrite(ps) + Utils.encodeWrite(pc.v) + "\n");
 			}
 			bw.close();
 		} catch (IOException | ConfigParserException e) {

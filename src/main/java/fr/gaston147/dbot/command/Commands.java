@@ -1428,7 +1428,22 @@ public class Commands {
 				PatternCmd pc = Main.patterns.get(name);
 				if (pc == null)
 					throw new CommandException("Unknown pattern \"" + name + "\".");
-				return new CommandValStr("```\nname: " + pc.name + "; pattern: " + pc.p.toString() + "; value: " + pc.v + ";\n```");
+				return new CommandValStr("```\nname:\n -> " + pc.name + "\npattern:\n -> " + pc.p.toString() + "\nvalue:\n -> " + pc.v + "\n```");
+			}
+		});
+		addCommand("save", "manage", "{cmd}", "###", new CommandValCheck2() {
+			
+			public int min() {
+				return 0;
+			}
+			
+			public int max() {
+				return 0;
+			}
+			
+			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				Main.instance.save();
+				return new CommandValStr("Saved.");
 			}
 		});
 		File bootFile = new File(Main.mainDir, "boot.code");
