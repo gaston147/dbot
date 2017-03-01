@@ -122,8 +122,7 @@ public class Utils {
 					index++;
 				}
 			}
-			String sRes = new String(toByteArray(res), "UTF-8");
-			return sRes.length() + ";" + sRes.toString() + ";";
+			return new String(toByteArray(res), "UTF-8");
 		} catch (UnsupportedEncodingException e) {
 			e.printStackTrace();
 		}
@@ -145,8 +144,7 @@ public class Utils {
 					index += 3;
 				}
 			}
-			String sRes = new String(toByteArray(res), "UTF-8");
-			return sRes;
+			return new String(toByteArray(res), "UTF-8");
 		} catch (UnsupportedEncodingException e) {
 			e.printStackTrace();
 		}

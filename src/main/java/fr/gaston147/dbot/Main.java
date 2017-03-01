@@ -31,6 +31,9 @@ import fr.gaston147.dbot.config.ConfigNodeMap;
 import fr.gaston147.dbot.config.ConfigNodeStr;
 import fr.gaston147.dbot.config.ConfigParser;
 import fr.gaston147.dbot.config.ConfigParserException;
+import fr.gaston147.dbot.perm.Perm;
+import fr.gaston147.dbot.perm.PermGroup;
+import fr.gaston147.dbot.perm.Perms;
 import sx.blah.discord.api.ClientBuilder;
 import sx.blah.discord.api.IDiscordClient;
 import sx.blah.discord.api.events.EventSubscriber;
@@ -65,17 +68,21 @@ public class Main {
 		return ct;
 	}
 	
-	private String token;
+	private String rootUserID, token;
 	public File saveDir;
 	public IDiscordClient client;
 	public Map<String, Boolean> commandMode;
 	public Map<String, CommandVal[]> commandSpam;
 	public Map<String, List<MSGStruct>> commandMsg;
+	public Map<String, List<Perm>> perms;
+	public List<PermGroup> groups;
+	public Map<String, List<PermGroup>> permGroups;
 	public Map<String, List<CommandThread>> coroutines;
 	public MoneyManager moneyManager;
 	private String ext = "conf";
 	public CommandParser cp;
 	private final Object eventEnd;
+	private boolean sleeping;
 	
 	public Main() {
 		eventEnd = new Object();
@@ -89,6 +96,9 @@ public class Main {
 			commandMode = new HashMap<String, Boolean>();
 			commandSpam = new HashMap<String, CommandVal[]>();
 			commandMsg = new HashMap<String, List<MSGStruct>>();
+			perms = new HashMap<String, List<Perm>>();
+			groups = new ArrayList<PermGroup>();
+			permGroups = new HashMap<String, List<PermGroup>>();
 			coroutines = new HashMap<String, List<CommandThread>>();
 			moneyManager = new MoneyManager();
 			cp = new CommandParser();
@@ -211,8 +221,35 @@ public class Main {
 		patterns.put(name, new PatternCmd(name, Pattern.compile(p), v));
 	}
 	
+	private static Pattern[] dollars = new Pattern[10];
+	static {
+		for (int i = 0; i < dollars.length; i++)
+			dollars[i] = dollarCrt(i);
+	}
+	
+	private static Pattern dollarCrt(int i) {
+		return Pattern.compile("\\$\\(" + i + "\\)");
+	}
+	
+	private static Pattern dollarFor(int i) {
+		return i < 10 ? dollars[i] : dollarCrt(i);
+	}
+	
+	public void sleep(IChannel channel) {
+		sleeping = true; // DIRTY
+	}
+	
+	public void wakeup(IChannel channel) {
+		sleeping = false; // DIRTY
+	}
+	
+	public boolean isSleeping(IChannel channel) {
+		return sleeping; // DIRTY
+	}
+	
 	@EventSubscriber
 	public void onMessage(MessageReceivedEvent event) {
+		boolean sleeping = isSleeping(event.getMessage().getChannel());
 		synchronized (eventEnd) {
 			callEvent("msg", new CommandVal[] { new CommandValStr(event.getMessage().getContent()) });
 			String str = event.getMessage().getContent();
@@ -224,64 +261,71 @@ public class Main {
 			} else if (str.startsWith("!")) {
 				str = str.substring("!".length());
 			} else {
-				StringBuilder sb = new StringBuilder();
-				String authorID = event.getMessage().getAuthor().getID();
-				
-				for (String name : patterns.keySet()) {
-					PatternCmd pc = patterns.get(name);
-					Matcher m = pc.p.matcher(" " + event.getMessage().getContent() + " ");
-					while (m.find()) {
-						String v = pc.v;
-						v = v.replaceAll("\\$\\(author\\)", event.getMessage().getAuthor().getDisplayName(event.getMessage().getGuild()).replaceAll("\\$", "\\\\$"));
-						for (int i = 0; i <= m.groupCount(); i++)
-							v = v.replaceAll("\\$\\(" + i + "\\)", m.group(i).replaceAll("\\$", "\\\\$"));
-						sb.append(v + "\n");
-					}
-				}
-				
-				CommandVal[] msgs = commandSpam.get(authorID);
-				if (msgs != null) {
-					try {
-						Commands.level = 0;
-						Commands.opCount = 0;
-						CommandVal msg = msgs[(int) (Math.random() * msgs.length)];
-						sb.append(msg.runStr(msg.getEnv()) + "\n");
-					} catch (CommandException e) {
-						sb.append("```\nError: " + e.getLocalizedMessage() + "\n```\n");
-					}
-				}
-				
-				if (commandMsg.containsKey(authorID)) {
-					List<MSGStruct> msgList = commandMsg.get(authorID);
-					if (msgList.size() > 0) {
-						for (MSGStruct msg : msgList) {
-							try {
-								sb.append("<@" + msg.sender + ">:\n" + msg.msg.runStr(msg.msg.getEnv()) + "\n");
-							} catch (CommandException e) {
+				if (!sleeping) {
+					StringBuilder sb = new StringBuilder();
+					String authorID = event.getMessage().getAuthor().getID();
+					
+					for (String name : patterns.keySet()) {
+						PatternCmd pc = patterns.get(name);
+						Matcher m = pc.p.matcher(" " + event.getMessage().getContent() + " ");
+						while (m.find()) {
+							String v = pc.v;
+							v = v.replaceAll("\\$\\(author\\)", event.getMessage().getAuthor().getDisplayName(event.getMessage().getGuild()).replaceAll("\\$", "\\\\$"));
+							for (int i = 0; i <= m.groupCount(); i++) {
+								Matcher m2 = dollarFor(i).matcher(v);
+								if (m2.find())
+									v = m2.replaceAll(m.group(i).replaceAll("\\$", "\\\\$"));
 							}
+							sb.append(v + "\n");
 						}
-						msgList.clear();
 					}
+					
+					CommandVal[] msgs = commandSpam.get(authorID);
+					if (msgs != null) {
+						try {
+							Commands.level = 0;
+							Commands.opCount = 0;
+							CommandVal msg = msgs[(int) (Math.random() * msgs.length)];
+							sb.append(msg.runStr(msg.getEnv()) + "\n");
+						} catch (CommandException e) {
+							sb.append("```\nError: " + e.getLocalizedMessage() + "\n```\n");
+						}
+					}
+					
+					if (commandMsg.containsKey(authorID)) {
+						List<MSGStruct> msgList = commandMsg.get(authorID);
+						if (msgList.size() > 0) {
+							for (MSGStruct msg : msgList) {
+								try {
+									sb.append("<@" + msg.sender + ">:\n" + msg.msg.runStr(msg.msg.getEnv()) + "\n");
+								} catch (CommandException e) {
+								}
+							}
+							msgList.clear();
+						}
+					}
+					
+					send(event.getMessage().getChannel(), sb.toString());
 				}
-				
-				send(event.getMessage().getChannel(), sb.toString());
 				return;
 			}
-			try {
-				Commands.level = 0;
-				Commands.opCount = 0;
-				StringReader sr = new StringReader(str);
-				EnvEach ee = new EnvEach(Commands.global, event.getMessage());
-				List<IUser> users = event.getMessage().getGuild().getUsers();
-				CommandVal[] userList = new CommandVal[users.size()];
-				for (int i = 0; i < userList.length; i++)
-					userList[i] = new CommandValStr(users.get(i).getID());
-				ee.defSet("users", new CommandValList(userList));
-				CommandThread ct = co_create(new CommandValEnv(ee, cp.parse(sr)));
-				resumeLoop(ct, new CommandVal[0]);
-				sr.close();
-			} catch (ParserException | CommandException e) {
-				sendError(event.getMessage().getChannel(), e.getLocalizedMessage());
+			if (!sleeping || hasPermission(event.getMessage().getAuthor().getID(), Perms.all.manage.cmdWhileAsleep)) {
+				try {
+					Commands.level = 0;
+					Commands.opCount = 0;
+					StringReader sr = new StringReader(str);
+					EnvEach ee = new EnvEach(Commands.global, event.getMessage());
+					List<IUser> users = event.getMessage().getGuild().getUsers();
+					CommandVal[] userList = new CommandVal[users.size()];
+					for (int i = 0; i < userList.length; i++)
+						userList[i] = new CommandValStr(users.get(i).getID());
+					ee.defSet("users", new CommandValList(userList));
+					CommandThread ct = co_create(new CommandValEnv(ee, cp.parse(sr)));
+					resumeLoop(ct, new CommandVal[0]);
+					sr.close();
+				} catch (ParserException | CommandException e) {
+					sendError(event.getMessage().getChannel(), e.getLocalizedMessage());
+				}
 			}
 			eventEnd.notifyAll();
 		}
@@ -308,11 +352,15 @@ public class Main {
 		BufferedReader botReader = new BufferedReader(new FileReader(botFile));
 		Config conf = parser.parse(botReader);
 		botReader.close();
+		if (!conf.exists("root-user-id")) {
+			log.error("Missing root user id in bot." + ext + ". Aborting.");
+			System.exit(0);
+		}
 		if (!conf.exists("bot-token")) {
 			log.error("Missing bot token in bot." + ext + ". Aborting.");
 			System.exit(0);
 		}
-		if (!conf.exists("save-dir-prefix")) {
+		if (!conf.exists("save-dir")) {
 			log.error("Missing save directory prefix in bot." + ext + ". Aborting.");
 			System.exit(0);
 		}
@@ -337,7 +385,7 @@ public class Main {
 	}
 	
 	public File getUserDir(Config conf) {
-		File userDir = new File(new File(mainDir, conf.get("save-dir-prefix")), conf.get("user-dir"));
+		File userDir = new File(new File(mainDir, conf.get("save-dir")), conf.get("user-dir"));
 		if (!userDir.exists()) {
 			userDir.mkdirs();
 			genUserDir(userDir);
@@ -353,8 +401,9 @@ public class Main {
 			Utils.mkdirsOrCrash(mainDir);
 			ConfigParser parser = new ConfigParser();
 			Config botConf = getBotConf(parser);
+			rootUserID = botConf.get("root-user-id");
 			token = botConf.get("bot-token");
-			saveDir = new File(mainDir, botConf.get("save-dir-prefix"));
+			saveDir = new File(mainDir, botConf.get("save-dir"));
 			Utils.mkdirsOrCrash(saveDir);
 		} catch (IOException | ConfigParserException e) {
 			e.printStackTrace();
@@ -420,6 +469,10 @@ public class Main {
 		}
 	}
 	
+	private String formatWithLength(String s) {
+		return s.length() + ";" + s + ";";
+	}
+	
 	public void save() {
 		try {
 			ConfigParser parser = new ConfigParser();
@@ -440,7 +493,7 @@ public class Main {
 			for (String name : patterns.keySet()) {
 				PatternCmd pc = patterns.get(name);
 				String ps = pc.p.toString();
-				bw.write(Utils.encodeWrite(pc.name) + Utils.encodeWrite(ps) + Utils.encodeWrite(pc.v) + "\n");
+				bw.write(formatWithLength(Utils.encodeWrite(pc.name)) + formatWithLength(Utils.encodeWrite(ps)) + formatWithLength(Utils.encodeWrite(pc.v)) + "\n");
 			}
 			bw.close();
 		} catch (IOException | ConfigParserException e) {
@@ -455,17 +508,50 @@ public class Main {
 	private void genBotFile(Writer w) throws IOException {
 		w.write("# Bot config file\n");
 		w.write("\n");
+		w.write("# Uncomment and add root user's id between quotes:\n");
+		w.write("# root-user-id: \"\"\n");
 		w.write("# Uncomment and add bot token between quotes:\n");
 		w.write("# bot-token: \"\"\n");
-		w.write("save-dir-prefix: \"save\"\n");
+		w.write("save-dir: \"save\"\n");
 		w.write("user-dir: \"user_dir\"\n");
 	}
 	
 	private void genUserDir(File dir) {
 	}
 	
-	public boolean hasPermission(String id, String perm) {
-		return id.equals("226438337425047552");
+	public void checkRoot(String id) throws CommandException {
+		if (!id.equals(rootUserID))
+			throw new CommandException("This command can only be executed by the root user.");
+	}
+	
+	private boolean _hasPermission(String id, Perm perm) {
+		List<PermGroup> gs = permGroups.get(id);
+		if (gs != null) {
+			for (PermGroup g : gs)
+				if (g.hasPermission(perm))
+					return true;
+		}
+		List<Perm> ps = perms.get(id);
+		if (ps == null) {
+			ps = new ArrayList<Perm>();
+			ps.add(Perms.all);
+			perms.put(id, ps);
+		}
+		if (ps != null) {
+			for (Perm p : ps)
+				if (perm.isAtMost(p))
+					return true;
+		}
+		return false;
+	}
+	
+	public boolean hasPermission(String id, Perm perm) {
+		return id.equals(rootUserID) || _hasPermission(id, perm);
+	}
+	
+	public void checkPermission(String id, Perm perm) throws CommandException {
+		if (!hasPermission(id, perm))
+			throw new CommandException("You don't have permission to run this command.");
 	}
 	
 	public String username(String id) {
@@ -516,5 +602,50 @@ public class Main {
 		_l2.clear();
 		_callEvent(l1, id, resumeArgs);
 		_callEvent(l2, "", resumeArgs);
+	}
+
+	public PermGroup getGroupByName(String name) {
+		for (PermGroup g : groups)
+			if (g.name.equals(name))
+				return g;
+		return null;
+	}
+	
+	public Perm getPermByName(String name) {
+		int ind = 0;
+		Perm p = null, np = null;
+		name = name + ".";
+		while (ind < name.length()) {
+			int beg = ind;
+			while (name.charAt(ind) != '.')
+				ind++;
+			String node = name.substring(beg, ind);
+			if (p == null) {
+				if (node.equals("all"))
+					np = Perms.all;
+			} else {
+				np = p.getChildByName(node);
+			}
+			if (np == null)
+				return null;
+			p = np;
+			ind++;
+		}
+		return p;
+	}
+	
+	private final Pattern userIDPattern = Pattern.compile("<@(.*)>");
+	public String readUserID(String user) {
+		Matcher m = userIDPattern.matcher(user);
+		if (!m.matches())
+			return null;
+		return m.group(1);
+	}
+	
+	public String checkUser(String user) throws CommandException {
+		String id = readUserID(user);
+		if (id == null)
+			throw new CommandException("User expected, got \"" + user + "\".");
+		return id;
 	}
 }

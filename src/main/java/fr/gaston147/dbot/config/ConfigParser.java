@@ -61,14 +61,26 @@ public class ConfigParser extends Parser<Config> {
 			blk();
 			if (out())
 				throw new ConfigParserException("Premature end of file.");
-			else if (c != ':')
-				throw new ConfigParserException("Expected \":\" got \"" + c + "\" at " + (ind + 1) + ".");
-			nxt();
-			blk();
-			ConfigNode val = readVal();
-			if (val == null)
-				throw new ConfigParserException("Value expected at " + (ind + 1) + ".");
-			m.put(key, val);
+			if (c == ':') {
+				nxt();
+				blk();
+				ConfigNode val = readVal();
+				if (val == null)
+					throw new ConfigParserException("Value expected at " + (ind + 1) + ".");
+				m.put(key, val);
+			} else if (c == '{') {
+				nxt();
+				blk();
+				ConfigNodeMap map = new ConfigNodeMap(readMap());
+				if (out())
+					throw new ConfigParserException("Premature end of file.");
+				if (c != '}')
+					throw new ConfigParserException("Unexpected character \"" + c + "\" at " + (ind + 1) + ".");
+				nxt();
+				m.put(key, map);
+			} else {
+				throw new ConfigParserException("Unexpected character \"" + c + "\" at " + (ind + 1) + ".");
+			}
 		}
 		return m;
 	}

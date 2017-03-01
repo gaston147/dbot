@@ -12,11 +12,11 @@ import java.io.StringWriter;
 import java.io.Writer;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
-import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -39,6 +39,9 @@ import fr.gaston147.dbot.Main;
 import fr.gaston147.dbot.ParserException;
 import fr.gaston147.dbot.PatternCmd;
 import fr.gaston147.dbot.Utils;
+import fr.gaston147.dbot.perm.Perm;
+import fr.gaston147.dbot.perm.PermGroup;
+import fr.gaston147.dbot.perm.Perms;
 
 public class Commands {
 	private static List<String> commandsSorted;
@@ -61,6 +64,12 @@ public class Commands {
 		commandsUsage.put(name, usage);
 		commandsDescription.put(name, description);
 		return cmd;
+	}
+	
+	public static void checkPerms(Env env, Perm p) throws CommandException {
+		if (env == global)
+			return;
+		Main.instance.checkPermission(env.getEach().msg.getAuthor().getID(), p);
 	}
 	
 	public static void init() throws CommandException {
@@ -91,6 +100,7 @@ public class Commands {
 			}
 			
 			public void invoke(Writer w, Env env, String cmdName, CommandVal[] args) throws IOException, CommandException {
+				checkPerms(env, Perms.all.misc.renderTable);
 				int rows = args[0].runInt(env);
 				if (rows < 0)
 					throw new CommandException(this, "The number of columns must be positive.");
@@ -113,13 +123,42 @@ public class Commands {
 			}
 			
 			public void invoke(Writer w, Env env, String cmdName, CommandVal[] args) throws IOException, CommandException {
-				if (env.getEach().msg.getAuthor().getID().equals("224240069362319360")) {
-					w.write("NTM mayem");
-				} else {
-					w.write("Stopping bot...");
-					Main.instance.stop();
-					w.write("Stopped.");
-				}
+				Main.instance.checkRoot(env.getEach().msg.getAuthor().getID());
+				w.write("Stopping bot...");
+				Main.instance.stop();
+				w.write("Stopped.");
+			}
+		});
+		addCommand("sleep", "manage", "{cmd}", "Put the bot to sleep.", new CommandValCheck2() {
+			
+			public int min() {
+				return 0;
+			}
+			
+			public int max() {
+				return 0;
+			}
+			
+			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				checkPerms(env, Perms.all.manage.sleep);
+				Main.instance.sleep(env.getEach().msg.getChannel());
+				return new CommandValStr("The bot is now sleeping in this channel.");
+			}
+		});
+		addCommand("wakeup", "manage", "{cmd}", "Wake up the bot.", new CommandValCheck2() {
+			
+			public int min() {
+				return 0;
+			}
+			
+			public int max() {
+				return 0;
+			}
+			
+			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				checkPerms(env, Perms.all.manage.wakeup);
+				Main.instance.wakeup(env.getEach().msg.getChannel());
+				return new CommandValStr("The bot is now awake in this channel.");
 			}
 		});
 		addCommand("help", "user", "{cmd}[ <page>[ <commands per page>]]", "Show available commands.", new CommandValCheck() {
@@ -133,6 +172,7 @@ public class Commands {
 			}
 			
 			public void invoke(Writer w, Env env, String cmdName, CommandVal[] args) throws IOException, CommandException {
+				checkPerms(env, Perms.all.user.help);
 				long page = 0, pageCap = PAGE_CAP;
 				if (args.length >= 1) {
 					page = args[0].runNbr(env) - 1;
@@ -174,6 +214,7 @@ public class Commands {
 			}
 			
 			public void invoke(Writer w, Env env, String cmdName, CommandVal[] args) throws IOException, CommandException {
+				checkPerms(env, Perms.all.user.cmd);
 				String id = env.getEach().msg.getAuthor().getID();
 				boolean mode = Main.instance.modeSet(id, !Main.instance.modeGet(id));
 				w.write("Command mode " + (mode ? "enabled" : "disabled") + ".");
@@ -190,6 +231,7 @@ public class Commands {
 			}
 			
 			public void invoke(Writer w, Env env, String cmdName, CommandVal[] args) throws IOException, CommandException {
+				checkPerms(env, Perms.all.misc.render);
 				StringBuilder str = new StringBuilder();
 				for (CommandVal v : args) {
 					String s = v.runStr(env);
@@ -221,6 +263,7 @@ public class Commands {
 			}
 			
 			public void invoke(Writer w, Env env, String cmdName, CommandVal[] args) throws IOException, CommandException {
+				checkPerms(env, Perms.all.misc.show);
 				StringBuilder str = new StringBuilder();
 				for (char s : args[0].runStr(env).toCharArray())
 					str.append(Integer.toString((int) s) + " ");
@@ -240,13 +283,10 @@ public class Commands {
 			}
 			
 			public void invoke(Writer w, Env env, String cmdName, CommandVal[] args) throws IOException, CommandException {
+				checkPerms(env, Perms.all.misc.spam);
 				String id = env.getEach().msg.getAuthor().getID();
-				if (args.length > 0) {
-					String user = args[0].runStr(env);
-					if (user.length() < 3 || !user.startsWith("<@") || !user.endsWith(">"))
-						throw new CommandException(this, "You must specify a user.");
-					id = user.substring("<@".length(), user.length() - ">".length());
-				}
+				if (args.length > 0)
+					id = Main.instance.checkUser(args[0].runStr(env));
 				if (args.length <= 1) {
 					Main.instance.commandSpam.remove(id);
 				} else {
@@ -268,6 +308,7 @@ public class Commands {
 			}
 			
 			public void invoke(Writer w, Env env, String cmdName, CommandVal[] args) throws IOException, CommandException {
+				checkPerms(env, Perms.all.program.loop);
 				int n = args[0].runInt(env);
 				if (n < 0)
 					throw new CommandException(this, "\"count\" must be positive.");
@@ -286,6 +327,7 @@ public class Commands {
 			}
 			
 			public void invoke(Writer w, Env env, String cmdName, CommandVal[] args) throws IOException, CommandException {
+				checkPerms(env, Perms.all.program.do_);
 				for (int i = 0; i < args.length; i++)
 					args[i].run(w, env);
 			}
@@ -301,6 +343,7 @@ public class Commands {
 			}
 			
 			public void invoke(Writer w, Env env, String cmdName, CommandVal[] args) throws IOException, CommandException {
+				checkPerms(env, Perms.all.program.rand);
 				w.write(args[(int) (Math.random() * args.length)].runStr(env));
 			}
 		});
@@ -315,6 +358,7 @@ public class Commands {
 			}
 			
 			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				checkPerms(env, Perms.all.program.map);
 				StringBuilder sb = new StringBuilder();
 				CommandValList list = args[0].runList(env);
 				for (int i = 0; i < list.ls.length; i++) {
@@ -335,6 +379,7 @@ public class Commands {
 			}
 			
 			public void invoke(Writer w, Env env, String cmdName, CommandVal[] args) throws IOException, CommandException {
+				checkPerms(env, Perms.all.program.d);
 				env.def(args[0].runStr(env));
 			}
 		});
@@ -349,6 +394,7 @@ public class Commands {
 			}
 			
 			public void invoke(Writer w, Env env, String cmdName, CommandVal[] args) throws IOException, CommandException {
+				checkPerms(env, Perms.all.program.s);
 				String varName = args[0].runStr(env);
 				if (args.length == 1)
 					env.remove(varName);
@@ -372,6 +418,7 @@ public class Commands {
 			}
 			
 			public void invoke(Writer w, Env env, String cmdName, CommandVal[] args) throws IOException, CommandException {
+				checkPerms(env, Perms.all.program.ds);
 				String varName = args[0].runStr(env);
 				try {
 					env.def(varName);
@@ -392,6 +439,7 @@ public class Commands {
 			}
 			
 			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				checkPerms(env, Perms.all.program.g);
 				return ((CommandValEnv) env.get(args[0].runStr(env))).child; // DIRTY
 			}
 		});
@@ -406,6 +454,7 @@ public class Commands {
 			}
 			
 			public void invoke(Writer w, Env env, String cmdName, CommandVal[] args) throws IOException, CommandException {
+				checkPerms(env, Perms.all.boolean_.equal);
 				String s0 = args[0].runStr(env);
 				for (int i = 1; i < args.length; i++)
 					if (!s0.equals(args[i].runStr(env)))
@@ -424,6 +473,7 @@ public class Commands {
 			}
 			
 			public void invoke(Writer w, Env env, String cmdName, CommandVal[] args) throws IOException, CommandException {
+				checkPerms(env, Perms.all.boolean_.not);
 				if (args[0].runStr(env).length() == 0)
 					w.write("1");
 			}
@@ -439,6 +489,7 @@ public class Commands {
 			}
 			
 			public void invoke(Writer w, Env env, String cmdName, CommandVal[] args) throws IOException, CommandException {
+				checkPerms(env, Perms.all.boolean_.and);
 				for (int i = 0; i < args.length; i++)
 					if (args[i].runStr(env).length() == 0)
 						return;
@@ -456,6 +507,7 @@ public class Commands {
 			}
 			
 			public void invoke(Writer w, Env env, String cmdName, CommandVal[] args) throws IOException, CommandException {
+				checkPerms(env, Perms.all.boolean_.or);
 				for (int i = 0; i < args.length; i++) {
 					String sarg = args[i].runStr(env);
 					if (sarg.length() > 0) {
@@ -476,6 +528,7 @@ public class Commands {
 			}
 			
 			public void invoke(Writer w, Env env, String cmdName, CommandVal[] args) throws IOException, CommandException {
+				checkPerms(env, Perms.all.program.if_);
 				if (args[0].runStr(env).length() > 0)
 					args[1].run(w, env);
 				else if (args.length == 3)
@@ -493,6 +546,7 @@ public class Commands {
 			}
 			
 			public void invoke(Writer w, Env env, String cmdName, CommandVal[] args) throws IOException, CommandException {
+				checkPerms(env, Perms.all.program.while_);
 				while (args[0].runStr(env).length() > 0)
 					args[1].run(w, env);
 			}
@@ -508,6 +562,7 @@ public class Commands {
 			}
 			
 			public void invoke(Writer w, Env env, String cmdName, CommandVal[] args) throws IOException, CommandException {
+				checkPerms(env, Perms.all.program.null_);
 				if (args.length == 1)
 					args[0].run(env);
 			}
@@ -523,6 +578,7 @@ public class Commands {
 			}
 			
 			public void invoke(Writer w, Env env, String cmdName, CommandVal[] args) throws IOException, CommandException {
+				checkPerms(env, Perms.all.math.plus);
 				long n = 0;
 				for (int i = 0; i < args.length; i++)
 					n += args[i].runNbr(env);
@@ -540,6 +596,7 @@ public class Commands {
 			}
 			
 			public void invoke(Writer w, Env env, String cmdName, CommandVal[] args) throws IOException, CommandException {
+				checkPerms(env, Perms.all.math.minus);
 				long n = 0;
 				if (args.length > 0) {
 					n = args[0].runNbr(env);
@@ -560,6 +617,7 @@ public class Commands {
 			}
 			
 			public void invoke(Writer w, Env env, String cmdName, CommandVal[] args) throws IOException, CommandException {
+				checkPerms(env, Perms.all.math.times);
 				long n = 1;
 				for (int i = 0; i < args.length; i++)
 					n *= args[i].runNbr(env);
@@ -577,6 +635,7 @@ public class Commands {
 			}
 			
 			public void invoke(Writer w, Env env, String cmdName, CommandVal[] args) throws IOException, CommandException {
+				checkPerms(env, Perms.all.math.div);
 				long n = 1;
 				if (args.length > 0) {
 					n = args[0].runNbr(env);
@@ -597,6 +656,7 @@ public class Commands {
 			}
 			
 			public void invoke(Writer w, Env env, String cmdName, CommandVal[] args) throws IOException, CommandException {
+				checkPerms(env, Perms.all.math.less);
 				long n0, n1;
 				
 				n1 = args[0].runNbr(env);
@@ -620,6 +680,7 @@ public class Commands {
 			}
 			
 			public void invoke(Writer w, Env env, String cmdName, CommandVal[] args) throws IOException, CommandException {
+				checkPerms(env, Perms.all.math.lessEq);
 				long n0, n1;
 				
 				n1 = args[0].runNbr(env);
@@ -643,6 +704,7 @@ public class Commands {
 			}
 			
 			public void invoke(Writer w, Env env, String cmdName, CommandVal[] args) throws IOException, CommandException {
+				checkPerms(env, Perms.all.math.greater);
 				long n0, n1;
 				
 				n1 = args[0].runNbr(env);
@@ -666,6 +728,7 @@ public class Commands {
 			}
 			
 			public void invoke(Writer w, Env env, String cmdName, CommandVal[] args) throws IOException, CommandException {
+				checkPerms(env, Perms.all.math.greaterEq);
 				long n0, n1;
 				
 				n1 = args[0].runNbr(env);
@@ -689,6 +752,7 @@ public class Commands {
 			}
 			
 			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				checkPerms(env, Perms.all.program.raw);
 				return args[0];
 			}
 		});
@@ -703,6 +767,7 @@ public class Commands {
 			}
 			
 			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				checkPerms(env, Perms.all.program.run);
 				return args[0].run(env).run(env);
 			}
 		});
@@ -717,6 +782,7 @@ public class Commands {
 			}
 			
 			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				checkPerms(env, Perms.all.program.lcrt);
 				int size = args[0].runInt(env);
 				if (size < 0)
 					throw new CommandException("Size must be positive.");
@@ -739,6 +805,7 @@ public class Commands {
 			}
 			
 			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				checkPerms(env, Perms.all.program.ls);
 				CommandValList ls = args[0].runList(env);
 				int ind = args[1].runInt(env);
 				if (ind < 0)
@@ -760,6 +827,7 @@ public class Commands {
 			}
 			
 			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				checkPerms(env, Perms.all.program.lg);
 				CommandValList ls = args[0].runList(env);
 				int ind = args[1].runInt(env);
 				if (ind < 0)
@@ -780,6 +848,7 @@ public class Commands {
 			}
 			
 			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				checkPerms(env, Perms.all.program.ldo);
 				CommandValList[] lists = new CommandValList[args.length];
 				int totalLen = 0;
 				for (int i = 0; i < args.length; i++)
@@ -806,6 +875,7 @@ public class Commands {
 			}
 			
 			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				checkPerms(env, Perms.all.program.type);
 				return new CommandValStr(args[0].run(env).type());
 			}
 		});
@@ -820,13 +890,10 @@ public class Commands {
 			}
 			
 			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				checkPerms(env, Perms.all.misc.msg);
 				String id = env.getEach().msg.getAuthor().getID();
-				if (args.length > 0) {
-					String user = args[0].runStr(env);
-					if (user.length() < 3 || !user.startsWith("<@") || !user.endsWith(">"))
-						throw new CommandException(this, "You must specify a user.");
-					id = user.substring("<@".length(), user.length() - ">".length());
-				}
+				if (args.length > 0)
+					id = Main.instance.checkUser(args[0].runStr(env));
 				if (!Main.instance.commandMsg.containsKey(id))
 					Main.instance.commandMsg.put(id, new ArrayList<MSGStruct>());
 				Main.instance.commandMsg.get(id).add(new MSGStruct(env.getEach().msg.getAuthor().getID(), args[1]));
@@ -844,6 +911,7 @@ public class Commands {
 			}
 			
 			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				checkPerms(env, Perms.all.program.dice);
 				long n = args[0].runNbr(env);
 				if (n < 0)
 					throw new CommandException("Number must be positive.");
@@ -861,6 +929,7 @@ public class Commands {
 			}
 			
 			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				checkPerms(env, Perms.all.misc.icrt);
 				int w, h;
 				w = args[0].runInt(env);
 				if (w <= 0)
@@ -873,7 +942,7 @@ public class Commands {
 				return new CommandValStr(env.getEach().createImage(w, h));
 			}
 		});
-		addCommand("idel", "misc", "{cmd} <image>", "###", new CommandValCheck2() {
+		addCommand("irm", "misc", "{cmd} <image>", "###", new CommandValCheck2() {
 			
 			public int min() {
 				return 1;
@@ -884,6 +953,7 @@ public class Commands {
 			}
 			
 			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				checkPerms(env, Perms.all.misc.irm);
 				env.getEach().deleteImage(args[0].runStr(env));
 				return EMPTY_STR;
 			}
@@ -899,6 +969,7 @@ public class Commands {
 			}
 			
 			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				checkPerms(env, Perms.all.misc.idrawText);
 				DImage dimg = env.getEach().getImage(args[0].runStr(env));
 				args[1].run(env);
 				dimg.drawText(null, args[2].runInt(env), args[3].runInt(env), args[4].runStr(env));
@@ -916,6 +987,7 @@ public class Commands {
 			}
 			
 			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				checkPerms(env, Perms.all.misc.ishow);
 				env.getEach().getImage(args[0].runStr(env)).show(env.getEach().msg.getChannel());
 				return EMPTY_STR;
 			}
@@ -931,6 +1003,7 @@ public class Commands {
 			}
 			
 			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				checkPerms(env, Perms.all.math.r);
 				int r = args[0].runInt(env);
 				if (r < 2)
 					throw new CommandException("Radix must be at least 2.");
@@ -955,6 +1028,7 @@ public class Commands {
 			}
 			
 			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				checkPerms(env, Perms.all.misc.mhh);
 				String id = args[0].runStr(env);
 				DImage dimg = env.getEach().getImage(id);
 				for (int y = 0; y < dimg.h; y++)
@@ -974,6 +1048,7 @@ public class Commands {
 			}
 			
 			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				checkPerms(env, Perms.all.misc.itoText);
 				DImage dimg = env.getEach().getImage(args[0].runStr(env));
 				return new CommandValStr(Utils.renderImage(dimg, dimg.h));
 			}
@@ -989,6 +1064,7 @@ public class Commands {
 			}
 			
 			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				checkPerms(env, Perms.all.misc.code);
 				String lang = "", str = args[0].runStr(env);
 				if (args.length >= 2) {
 					lang = str;
@@ -1008,6 +1084,7 @@ public class Commands {
 			}
 			
 			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				checkPerms(env, Perms.all.misc.math);
 				try {
 					TeXFormula fomule = new TeXFormula(args[0].runStr(env));
 					TeXIcon ti = fomule.createTeXIcon(TeXConstants.STYLE_DISPLAY, 40);
@@ -1040,8 +1117,7 @@ public class Commands {
 			}
 			
 			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
-				if (!Main.instance.hasPermission(env.getEach().msg.getAuthor().getID(), "image.load-url"))
-					throw new CommandException("You don't have permission to run this command.");
+				checkPerms(env, Perms.all.misc.iloadUrl);
 				env.getEach().newImageID(); // Check if the user can create an image
 				DImage dimg;
 				try {
@@ -1063,6 +1139,7 @@ public class Commands {
 			}
 			
 			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				checkPerms(env, Perms.all.misc.rip);
 				try {
 					DImage dimg = DImage.loadFromUrl(new URL("http://www.monumentsgagnon.com/images/laser/canards.jpg"));
 					String	line1 = args[0].runStr(env),
@@ -1090,6 +1167,7 @@ public class Commands {
 			}
 			
 			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				checkPerms(env, Perms.all.economy.balance);
 				String user, userID;
 				if (args.length == 0) {
 					userID = env.getEach().msg.getAuthor().getID();
@@ -1117,6 +1195,7 @@ public class Commands {
 			}
 			
 			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				checkPerms(env, Perms.all.economy.give);
 				String authorID = env.getEach().msg.getAuthor().getID();
 				String id = args[0].runStr(env);
 				if (id.length() < 3 || !id.startsWith("<@") || !id.endsWith(">"))
@@ -1142,8 +1221,7 @@ public class Commands {
 			}
 			
 			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
-				if (!Main.instance.hasPermission(env.getEach().msg.getAuthor().getID(), "economy.manage"))
-					throw new CommandException("You don't have permission to run this command.");
+				checkPerms(env, Perms.all.economyMan.create);
 				String id = args[0].runStr(env);
 				if (id.length() < 3 || !id.startsWith("<@") || !id.endsWith(">"))
 					throw new CommandException("User expected.");
@@ -1166,6 +1244,7 @@ public class Commands {
 			}
 			
 			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				checkPerms(env, Perms.all.economy.list);
 				int page = 0, userPerPage = 10;
 				if (args.length >= 1) {
 					page = args[0].runInt(env) - 1;
@@ -1237,6 +1316,7 @@ public class Commands {
 			}
 			
 			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				checkPerms(env, Perms.all.coroutine.yield);
 				return ((CommandThread) Thread.currentThread()).co_yield(new CommandValList(args));
 			}
 		});
@@ -1251,6 +1331,7 @@ public class Commands {
 			}
 			
 			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				checkPerms(env, Perms.all.misc.lmgtfy);
 				return new CommandValStr("https://lmgtfy.com/?q=" + Utils.urlEncode(args[0].runStr(env)));
 			}
 		});
@@ -1265,6 +1346,7 @@ public class Commands {
 			}
 			
 			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				checkPerms(env, Perms.all.program.waitEvents);
 				String[] events = new String[args.length];
 				for (int i = 0; i < args.length; i++)
 					events[i] = args[i].runStr(env);
@@ -1288,6 +1370,7 @@ public class Commands {
 			}
 			
 			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				checkPerms(env, Perms.all.program.pAll);
 				StringBuilder total = new StringBuilder();
 				int count = args.length;
 				CommandThread[] cos = new CommandThread[args.length];
@@ -1337,6 +1420,7 @@ public class Commands {
 			}
 			
 			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				checkPerms(env, Perms.all.program.echo);
 				if (args.length == 2)
 					throw new CommandException("Not implemented yet.");
 				((CommandThread) Thread.currentThread()).send(args[0].runStr(env));
@@ -1354,6 +1438,7 @@ public class Commands {
 			}
 			
 			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				checkPerms(env, Perms.all.pattern.set);
 				try {
 					String name = args[0].runStr(env);
 					Main.patterns.put(name, new PatternCmd(name, Pattern.compile(args[1].runStr(env)), args[2].runStr(env)));
@@ -1374,6 +1459,7 @@ public class Commands {
 			}
 			
 			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				checkPerms(env, Perms.all.pattern.rm);
 				String name = args[0].runStr(env);
 				if (!Main.patterns.containsKey(name))
 					throw new CommandException("Unknown pattern \"" + name + "\".");
@@ -1392,6 +1478,7 @@ public class Commands {
 			}
 			
 			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				checkPerms(env, Perms.all.pattern.ls);
 				int page = 0, perPage = 10;
 				if (args.length >= 1) {
 					page = args[0].runInt(env) - 1;
@@ -1403,12 +1490,17 @@ public class Commands {
 							throw new CommandException("Per page must be at least 1.");
 					}
 				}
-				Collection<PatternCmd> ls = Main.patterns.values();
-				Iterator<PatternCmd> it = ls.iterator();
+				PatternCmd[] arr = Main.patterns.values().toArray(new PatternCmd[Main.patterns.size()]);
+				Arrays.sort(arr, new Comparator<PatternCmd>() {
+					
+					public int compare(PatternCmd o1, PatternCmd o2) {
+						return o1.name.compareTo(o2.name);
+					}
+				});
 				StringBuilder sb = new StringBuilder();
-				sb.append("```\n(" + (page + 1) + "/" + ((ls.size() + perPage - 1) / perPage) + ")\n");
-				while (it.hasNext())
-					sb.append(" - " + it.next().name + "\n");
+				sb.append("```\n(" + (page + 1) + "/" + ((arr.length + perPage - 1) / perPage) + ")\n");
+				for (PatternCmd pc : arr)
+					sb.append(" - " + pc.name + "\n");
 				sb.append("```");
 				return new CommandValStr(sb.toString());
 			}
@@ -1424,6 +1516,7 @@ public class Commands {
 			}
 			
 			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				checkPerms(env, Perms.all.pattern.info);
 				String name = args[0].runStr(env);
 				PatternCmd pc = Main.patterns.get(name);
 				if (pc == null)
@@ -1442,8 +1535,297 @@ public class Commands {
 			}
 			
 			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				Main.instance.checkRoot(env.getEach().msg.getAuthor().getID());
 				Main.instance.save();
 				return new CommandValStr("Saved.");
+			}
+		});
+		// DIRTY - need to create pages to prevent overflow
+		addCommand("permls", "manage", "{cmd}", "###", new CommandValCheck2() {
+			
+			public int min() {
+				return 0;
+			}
+			
+			public int max() {
+				return 0;
+			}
+			
+			private void permsRecur(StringBuilder sb, String space, Perm p) {
+				sb.append(space + p.fullName);
+				if (p.children.size() != 0) {
+					sb.append(":\n");
+					for (Perm p2 : p.children)
+						permsRecur(sb, space + "  ", p2);
+				} else {
+					sb.append("\n");
+				}
+			}
+			
+			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				checkPerms(env, Perms.all.perm.ls);
+				StringBuilder sb = new StringBuilder();
+				permsRecur(sb, "  ", Perms.all);
+				return new CommandValStr("```\nPermissions:\n" + sb.toString() + "```");
+			}
+		});
+		addCommand("perm", "manage", "{cmd} group|user ls|add|rm|parent|perm <group name>|ls|add|rm <group name>|<permission>", "###", new CommandValCheck2() {
+			
+			public int min() {
+				return 0;
+			}
+			
+			public int max() {
+				return -1;
+			}
+			
+			private void notEnoughArgs(int min) throws CommandException {
+				throw new CommandException("Not enough arguments, expected at least " + min + ".");
+			}
+			
+			private void unexpectedValue(String v) throws CommandException {
+				throw new CommandException("Unexpected value \"" + v + "\".");
+			}
+			
+			public CommandVal invoke(Env env, String cmdName, CommandVal[] args) throws CommandException {
+				StringBuilder sb = new StringBuilder();
+				String[] sArgs = new String[args.length];
+				for (int i = 0; i < args.length; i++)
+					sArgs[i] = args[i].runStr(env);
+				if (sArgs.length < 1) {
+					notEnoughArgs(1);
+				} else if (sArgs[0].equals("group")) {
+					if (sArgs.length < 2) {
+						notEnoughArgs(2);
+					} else if (sArgs[1].equals("ls")) {
+						sb.append("```\n");
+						sb.append("Groups:\n");
+						if (Main.instance.groups.size() > 0) {
+							for (PermGroup g : Main.instance.groups)
+								sb.append(" - " + g.name + "\n");
+						} else {
+							sb.append("   (none)\n");
+						}
+						sb.append("```");
+					} else if (sArgs[1].equals("add")) {
+						if (sArgs.length < 3)
+							notEnoughArgs(3);
+						String name = sArgs[2];
+						if (Main.instance.getGroupByName(name) != null)
+							throw new CommandException("A group with name \"" + name + "\" already exists.");
+						Main.instance.groups.add(new PermGroup(name, new ArrayList<PermGroup>(), new ArrayList<Perm>()));
+						sb.append("Group created.");
+					} else if (sArgs[1].equals("rm")) {
+						if (sArgs.length < 3)
+							notEnoughArgs(3);
+						String name = sArgs[2];
+						PermGroup g = Main.instance.getGroupByName(name);
+						if (g == null)
+							throw new CommandException("Unknown group \"" + name + "\".");
+						Main.instance.groups.remove(g);
+						sb.append("Group removed.");
+					} else if (sArgs[1].equals("info")) {
+						if (sArgs.length < 3)
+							notEnoughArgs(3);
+						String name = sArgs[2];
+						PermGroup g = Main.instance.getGroupByName(name);
+						if (g == null)
+							throw new CommandException("Unknown group \"" + name + "\".");
+						sb.append("```\n");
+						sb.append("Inherit:\n");
+						if (g.parents.size() > 0) {
+							for (PermGroup g2 : g.parents)
+								sb.append(" - " + g2.name + "\n");
+						} else {
+							sb.append("   (none)\n");
+						}
+						sb.append("Permissions:\n");
+						if (g.perms.size() > 0) {
+							for (Perm p : g.perms)
+								sb.append(" - " + p.fullName + "\n");
+						} else {
+							sb.append("   (none)\n");
+						}
+						sb.append("```");
+					} else if (sArgs[1].equals("parent")) {
+						if (sArgs.length < 3)
+							notEnoughArgs(3);
+						String name = sArgs[2];
+						PermGroup g = Main.instance.getGroupByName(name);
+						if (g == null)
+							throw new CommandException("Unknown group \"" + name + "\".");
+						if (sArgs.length < 4) {
+							notEnoughArgs(4);
+						} else if (sArgs[3].equals("add")) {
+							if (sArgs.length < 5)
+								notEnoughArgs(5);
+							String name2 = sArgs[4];
+							PermGroup g2 = Main.instance.getGroupByName(name2);
+							if (g2 == null)
+								throw new CommandException("Unknown group \"" + name2 + "\".");
+							if (g.parents.contains(g2))
+								throw new CommandException("\"" + g.name + "\" already inherit from \"" + g2.name + "\".");
+							g.parents.add(g2);
+							sb.append("Group added to parents.");
+						} else if (sArgs[3].equals("rm")) {
+							if (sArgs.length < 5)
+								notEnoughArgs(5);
+							String name2 = sArgs[4];
+							PermGroup g2 = Main.instance.getGroupByName(name2);
+							if (g2 == null)
+								throw new CommandException("Unknown group \"" + name2 + "\".");
+							if (!g.parents.contains(g2))
+								throw new CommandException("\"" + g.name + "\" doesn't inherit from \"" + g2.name + "\".");
+							g.parents.remove(g2);
+							sb.append("Group removed from parents.");
+						} else {
+							unexpectedValue(sArgs[3]);
+						}
+					} else if (sArgs[1].equals("perm")) {
+						if (sArgs.length < 3)
+							notEnoughArgs(3);
+						String name = sArgs[2];
+						PermGroup g = Main.instance.getGroupByName(name);
+						if (g == null)
+							throw new CommandException("Unknown group \"" + name + "\".");
+						if (sArgs.length < 4) {
+							notEnoughArgs(4);
+						} else if (sArgs[3].equals("add")) {
+							if (sArgs.length < 5)
+								notEnoughArgs(5);
+							String name2 = sArgs[4];
+							Perm p = Main.instance.getPermByName(name2);
+							if (p == null)
+								throw new CommandException("Unknown permission \"" + name2 + "\".");
+							if (g.perms.contains(p))
+								throw new CommandException("Group \"" + g.name + "\" already have the permission \"" + p.fullName + "\".");
+							g.perms.add(p);
+							sb.append("Permission added to group.");
+						} else if (sArgs[3].equals("rm")) {
+							if (sArgs.length < 5)
+								notEnoughArgs(5);
+							String name2 = sArgs[4];
+							Perm p = Main.instance.getPermByName(name2);
+							if (p == null)
+								throw new CommandException("Unknown permission \"" + name2 + "\".");
+							if (!g.perms.contains(p))
+								throw new CommandException("Group \"" + g.name + "\" doesn't have the permission \"" + p.fullName + "\".");
+							g.perms.remove(p);
+							sb.append("Permission removed from group.");
+						} else if (sArgs[3].equals("has")) {
+							if (sArgs.length < 5)
+								notEnoughArgs(5);
+							String name2 = sArgs[4];
+							Perm p = Main.instance.getPermByName(name2);
+							if (p == null)
+								throw new CommandException("Unknown permission \"" + name2 + "\".");
+							sb.append("The group " + (g.hasPermission(p) ? "has" : "doesn't have") + " the permission \"" + p.fullName + "\".");
+						} else {
+							unexpectedValue(sArgs[3]);
+						}
+					} else {
+						unexpectedValue(sArgs[1]);
+					}
+				} else if (sArgs[0].equals("user")) {
+					if (sArgs.length < 2)
+						notEnoughArgs(2);
+					String userID = Main.instance.checkUser(sArgs[1]);
+					List<PermGroup> groups = Main.instance.permGroups.get(userID);
+					List<Perm> perms = Main.instance.perms.get(userID);
+					if (sArgs.length < 3) {
+						notEnoughArgs(3);
+					} else if (sArgs[2].equals("info")) {
+						sb.append("```\n");
+						sb.append("Groups:\n");
+						if (groups != null && groups.size() > 0) {
+							for (PermGroup g : groups)
+								sb.append(" - " + g.name + "\n");
+						} else {
+							sb.append("   (none)\n");
+						}
+						sb.append("Permissions:\n");
+						if (perms != null && perms.size() > 0) {
+							for (Perm p : perms)
+								sb.append(" - " + p.name + "\n");
+						} else {
+							sb.append("   (none)\n");
+						}
+						sb.append("```");
+					} else if (sArgs[2].equals("group")) {
+						if (sArgs.length < 4) {
+							notEnoughArgs(4);
+						} else if (sArgs[3].equals("add")) {
+							if (sArgs.length < 5)
+								notEnoughArgs(5);
+							String name = sArgs[4];
+							PermGroup g = Main.instance.getGroupByName(name);
+							if (g == null)
+								throw new CommandException("Unknown group \"" + name + "\".");
+							if (groups == null)
+								Main.instance.permGroups.put(userID, groups = new ArrayList<PermGroup>());
+							if (groups.contains(g))
+								throw new CommandException(Main.instance.username(userID) + " is already part of the group \"" + g.name + "\".");
+							groups.add(g);
+							sb.append("Group added to user.");
+						} else if (sArgs[3].equals("rm")) {
+							if (sArgs.length < 5)
+								notEnoughArgs(5);
+							String name = sArgs[4];
+							PermGroup g = Main.instance.getGroupByName(name);
+							if (g == null)
+								throw new CommandException("Unknown group \"" + name + "\".");
+							if (groups == null || !groups.contains(g))
+								throw new CommandException(Main.instance.username(userID) + " isn't part of the group \"" + g.name + "\".");
+							groups.remove(g);
+							sb.append("Group removed from user.");
+						} else {
+							unexpectedValue(sArgs[3]);
+						}
+					} else if (sArgs[2].equals("perm")) {
+						if (sArgs.length < 4) {
+							notEnoughArgs(4);
+						} else if (sArgs[3].equals("add")) {
+							if (sArgs.length < 5)
+								notEnoughArgs(5);
+							String name = sArgs[4];
+							Perm p = Main.instance.getPermByName(name);
+							if (p == null)
+								throw new CommandException("Unknown permission \"" + name + "\".");
+							if (perms == null)
+								Main.instance.perms.put(userID, perms = new ArrayList<Perm>());
+							if (perms.contains(p))
+								throw new CommandException(Main.instance.username(userID) + " already have the permission \"" + p.fullName + "\".");
+							perms.add(p);
+							sb.append("Permission added to user.");
+						} else if (sArgs[3].equals("rm")) {
+							if (sArgs.length < 5)
+								notEnoughArgs(5);
+							String name = sArgs[4];
+							Perm p = Main.instance.getPermByName(name);
+							if (p == null)
+								throw new CommandException("Unknown permission \"" + name + "\".");
+							if (perms == null || !perms.contains(p))
+								throw new CommandException(Main.instance.username(userID) + " doesn't have the permission \"" + p.fullName + "\".");
+							perms.remove(p);
+							sb.append("Permission removed from user.");
+						} else {
+							unexpectedValue(sArgs[3]);
+						}
+					} else if (sArgs[3].equals("has")) {
+						if (sArgs.length < 5)
+							notEnoughArgs(5);
+						String name2 = sArgs[4];
+						Perm p = Main.instance.getPermByName(name2);
+						if (p == null)
+							throw new CommandException("Unknown permission \"" + name2 + "\".");
+						sb.append("The user " + Main.instance.username(userID) + " " + (Main.instance.hasPermission(userID, p) ? "has" : "doesn't have") + " the permission \"" + p.fullName + "\".");
+					} else {
+						unexpectedValue(sArgs[2]);
+					}
+				} else {
+					unexpectedValue(sArgs[0]);
+				}
+				return new CommandValStr(sb.toString());
 			}
 		});
 		File bootFile = new File(Main.mainDir, "boot.code");
